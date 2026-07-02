@@ -179,3 +179,101 @@ Optional bonus:
 - add authentication for SSE or HTTP transport
 - support both SQLite and PostgreSQL with the same MCP surface
 - add richer output annotations or pagination
+
+---
+
+## Implementation (Student Submission)
+
+The working implementation lives in [`implementation/`](implementation/).
+
+### Setup
+
+```bash
+cd implementation
+python -m venv .venv
+source .venv/Scripts/activate      # Windows Git Bash; use .venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+
+python init_db.py                  # creates and seeds implementation/lab.db
+python mcp_server.py               # runs the MCP server over stdio (default transport)
+```
+
+For an HTTP/SSE demo instead of stdio:
+
+```bash
+python mcp_server.py --http        # serves at http://localhost:8090/mcp
+```
+
+### Data model
+
+SQLite database with three tables: `students`, `courses`, `enrollments` (seeded with sample rows). Schema is defined and (re)created by `init_db.py`, so it is fully reproducible.
+
+### Tools
+
+| Tool | Description |
+|---|---|
+| `search(table, columns?, filters?, limit?, offset?, order_by?, descending?)` | Filtered, paginated row search. `filters` is a list of `{"column", "op", "value"}`; `op` ∈ `=, !=, >, >=, <, <=, like, in`. |
+| `insert(table, values)` | Inserts one row (`values` = column→value map) and returns the inserted row + row id. |
+| `aggregate(table, metric, column?, filters?, group_by?)` | `metric` ∈ `count, avg, sum, min, max`, with optional filters and `GROUP BY`. |
+
+All three validate `table`/`column`/`operator`/`metric` against the live schema before building any SQL, and always execute with bound parameters — no string concatenation of user input into SQL.
+
+### Resources
+
+- `schema://database` — full schema (all tables/columns) as JSON.
+- `schema://table/{table_name}` — schema for a single table as JSON.
+
+### Testing and verification
+
+```bash
+# Unit tests for the SQLite adapter (validation, search/insert/aggregate)
+pytest
+
+# Full MCP protocol verification: spawns the real server over stdio,
+# checks tool/resource discovery, valid calls, and that invalid calls
+# (unknown table/column/operator/metric, empty insert) fail with a clear error.
+python verify_server.py
+
+# Interactive inspection (opens MCP Inspector in the browser)
+./start_inspector.sh
+```
+
+`verify_server.py` output (abridged) — all checks pass, invalid calls correctly return `isError = True`:
+
+```
+[PASS] tool 'search' discoverable
+[PASS] tool 'insert' discoverable
+[PASS] tool 'aggregate' discoverable
+[PASS] schema://database discoverable
+[PASS] schema://table/{table_name} discoverable
+[PASS] search valid call succeeds
+[PASS] insert valid call succeeds
+[PASS] aggregate valid call succeeds
+[PASS] search on unknown table is rejected
+[PASS] search on unknown column is rejected
+[PASS] search with unsupported operator is rejected
+[PASS] aggregate with unsupported metric is rejected
+[PASS] insert with empty values is rejected
+All checks passed.
+```
+
+### Client configuration example (Claude Code)
+
+Copy [`implementation/.mcp.json.example`](implementation/.mcp.json.example) to `.mcp.json` and replace the path with the absolute path to `mcp_server.py` on your machine:
+
+```json
+{
+  "mcpServers": {
+    "sqlite-lab": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["/ABSOLUTE/PATH/TO/implementation/mcp_server.py"],
+      "env": {}
+    }
+  }
+}
+```
+
+Then reference resources directly in Claude Code with `@sqlite-lab:schema://database`.
+
+Equivalent setup commands for Gemini CLI and Codex are in [`Tips.md`](Tips.md).
