@@ -277,3 +277,44 @@ Copy [`implementation/.mcp.json.example`](implementation/.mcp.json.example) to `
 Then reference resources directly in Claude Code with `@sqlite-lab:schema://database`.
 
 Equivalent setup commands for Gemini CLI and Codex are in [`Tips.md`](Tips.md).
+
+### Verified client test (Claude Code CLI)
+
+The server was registered and exercised with the real Claude Code CLI (not just the `verify_server.py` script):
+
+```bash
+cd implementation
+claude mcp add sqlite-lab -- "$(pwd)/.venv/Scripts/python.exe" "$(pwd)/mcp_server.py"
+claude mcp list
+# sqlite-lab: ... - ✓ Connected
+
+claude -p "Use the sqlite-lab MCP server to search the students table for students in cohort A1, then tell me their names." \
+  --allowedTools "mcp__sqlite-lab__search"
+```
+
+Output:
+
+```
+There are 3 students in cohort A1:
+1. Nguyen Duc Hieu
+2. Tran Thi Mai
+3. Do Quang Minh
+```
+
+A second headless run combined resource reading and the `aggregate` tool:
+
+```bash
+claude -p "Read @sqlite-lab:schema://database then use the sqlite-lab aggregate tool to compute the average enrollment score grouped by term. Summarize both results briefly." \
+  --allowedTools "mcp__sqlite-lab__aggregate,mcp__sqlite-lab__search"
+```
+
+Output (matches `verify_server.py`'s result exactly — Fall2025: 85.875, Spring2026: 81.25):
+
+```
+Average Score by Term
+Term          Avg Score
+Fall 2025     85.88
+Spring 2026   81.25
+```
+
+This confirms: the schema resource is readable via `@sqlite-lab:schema://database`, and both `search` and `aggregate` are discovered and called correctly by a real MCP client.
